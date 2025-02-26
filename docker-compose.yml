@@ -1,0 +1,134 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.9
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/acme.json:/acme.json:rw
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/config:/config:ro
+    networks:
+      - traefik_network
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.{{ domain_name }}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$xyz123"
+
+  frontend:
+    build: ./frontend
+    environment:
+      - PORT=8080
+      - AUTH_API_ADDRESS=https://{{ domain_name }}/api/auth
+      - TODOS_API_ADDRESS=https://{{ domain_name }}/api/todos
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`{{ domain_name }}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=8080"
+
+  auth-api:
+    build: ./auth-api
+    environment:
+      - AUTH_API_PORT=8081
+      - JWT_SECRET=myfancysecret
+      - USERS_API_ADDRESS=http://users-api:8083
+    networks:
+      - traefik_network
+    depends_on:
+      - users-api
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth-api-subdomain.rule=Host(`auth.{{ domain_name }}`)"
+      - "traefik.http.routers.auth-api-subdomain.entrypoints=websecure"
+      - "traefik.http.routers.auth-api-subdomain.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.auth-api-path.rule=Host(`{{ domain_name }}`) && PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.auth-api-path.entrypoints=websecure"
+      - "traefik.http.routers.auth-api-path.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.auth-api-path.middlewares=auth-api-stripprefix"
+      - "traefik.http.middlewares.auth-api-stripprefix.stripprefix.prefixes=/api/auth"
+      - "traefik.http.services.auth-api.loadbalancer.server.port=8081"
+
+  todos-api:
+    build: ./todos-api
+    environment:
+      - JWT_SECRET=myfancysecret
+      - REDIS_HOST=redis-queue
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=log_channel
+    networks:
+      - traefik_network
+    depends_on:
+      - redis-queue
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.todos-api-subdomain.rule=Host(`todos.{{ domain_name }}`)"
+      - "traefik.http.routers.todos-api-subdomain.entrypoints=websecure"
+      - "traefik.http.routers.todos-api-subdomain.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.todos-api-path.rule=Host(`{{ domain_name }}`) && PathPrefix(`/api/todos`)"
+      - "traefik.http.routers.todos-api-path.entrypoints=websecure"
+      - "traefik.http.routers.todos-api-path.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.todos-api-path.middlewares=todos-api-stripprefix"
+      - "traefik.http.middlewares.todos-api-stripprefix.stripprefix.prefixes=/api/todos"
+      - "traefik.http.services.todos-api.loadbalancer.server.port=8082"
+
+  users-api:
+    build: ./users-api
+    environment:
+      - SERVER_PORT=8083
+      - JWT_SECRET=myfancysecret
+    networks:
+      - traefik_network
+    restart: always
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users-api-subdomain.rule=Host(`users.{{ domain_name }}`)"
+      - "traefik.http.routers.users-api-subdomain.entrypoints=websecure"
+      - "traefik.http.routers.users-api-subdomain.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.users-api-path.rule=Host(`{{ domain_name }}`) && PathPrefix(`/api/users`)"
+      - "traefik.http.routers.users-api-path.entrypoints=websecure"
+      - "traefik.http.routers.users-api-path.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.users-api-path.middlewares=users-api-stripprefix"
+      - "traefik.http.middlewares.users-api-stripprefix.stripprefix.prefixes=/api/users"
+      - "traefik.http.services.users-api.loadbalancer.server.port=8083"
+
+  log-processor:
+    build: ./log-processor
+    environment:
+      - REDIS_HOST=redis-queue
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=log_channel
+    networks:
+      - traefik_network
+    depends_on:
+      - redis-queue
+    restart: always
+
+  redis-queue:
+    image: redis:alpine
+    volumes:
+      - redis-data:/data
+    networks:
+      - traefik_network
+    restart: always
+
+networks:
+  traefik_network:
+    driver: bridge
+
+volumes:
+  redis-data:

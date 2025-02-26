@@ -1,0 +1,118 @@
+---
+- name: Deploy Microservices Application
+  hosts: microservices
+  become: true
+  vars:
+    domain_name: "{{ lookup('env', 'TF_VAR_domain_name') }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - git
+        state: present
+
+    - name: Install Docker
+      block:
+        - name: Add Docker GPG key
+          apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            state: present
+
+        - name: Add Docker repository
+          apt_repository:
+            repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+            state: present
+
+        - name: Install Docker packages
+          apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+            state: present
+
+        - name: Add user to docker group
+          user:
+            name: "{{ ansible_user }}"
+            groups: docker
+            append: yes
+
+    - name: Install Docker Compose
+      pip:
+        name: docker-compose
+        state: present
+
+    - name: Create project directory
+      file:
+        path: /opt/microservices-app
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Clone application repository
+      git:
+        repo: https://github.com/your-username/your-microservices-repo.git
+        dest: /opt/microservices-app
+        version: main
+      become_user: "{{ ansible_user }}"
+
+    - name: Create Traefik directory structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+      with_items:
+        - /opt/microservices-app/traefik
+        - /opt/microservices-app/traefik/config
+
+    - name: Create ACME JSON file for SSL certificates
+      file:
+        path: /opt/microservices-app/traefik/acme.json
+        state: touch
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+
+    - name: Copy Traefik configuration files
+      template:
+        src: "../traefik/{{ item.src }}"
+        dest: "/opt/microservices-app/traefik/{{ item.dest }}"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+      with_items:
+        - { src: 'traefik.yml.j2', dest: 'traefik.yml' }
+        - { src: 'middleware.yml', dest: 'config/middleware.yml' }
+
+    - name: Copy docker-compose.yml
+      template:
+        src: "../docker-compose.yml.j2"
+        dest: "/opt/microservices-app/docker-compose.yml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
+    - name: Deploy the application with Docker Compose
+      become_user: "{{ ansible_user }}"
+      community.docker.docker_compose:
+        project_src: /opt/microservices-app
+        files:
+          - docker-compose.yml
+        state: present
+        pull: yes
+      environment:
+        DOMAIN_NAME: "{{ domain_name }}"
