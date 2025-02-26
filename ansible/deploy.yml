@@ -95,7 +95,7 @@
         group: "{{ ansible_user }}"
         mode: '0644'
       with_items:
-        - { src: 'traefik.yml.j2', dest: 'traefik.yml' }
+        - { src: 'traefik.yml', dest: 'traefik.yml' }
         - { src: 'middleware.yml', dest: 'config/middleware.yml' }
 
     - name: Copy docker-compose.yml

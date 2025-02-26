@@ -1,0 +1,4 @@
+nosakey.pem
+.terraform*
+inventory.ini
+*.tfstate
