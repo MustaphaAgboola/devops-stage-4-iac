@@ -100,7 +100,7 @@ resource "aws_instance" "microservices_server" {
 # Elastic IP for stable public address
 resource "aws_eip" "microservices_eip" {
   instance = aws_instance.microservices_server.id
-  vpc      = true
+  associate_with_private_ip = false
 
   tags = {
     Name = "microservices-eip"

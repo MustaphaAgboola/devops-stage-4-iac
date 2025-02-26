@@ -63,7 +63,7 @@
 
     - name: Clone application repository
       git:
-        repo: https://github.com/your-username/your-microservices-repo.git
+        repo: https://github.com/MustaphaAgboola/DevOps-Stage-4.git
         dest: /opt/microservices-app
         version: main
       become_user: "{{ ansible_user }}"
