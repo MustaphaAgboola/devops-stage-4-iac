@@ -107,6 +107,40 @@ resource "aws_eip" "microservices_eip" {
   }
 }
 
+# Route 53 configuration - Add this section
+# Get the hosted zone for your domain
+data "aws_route53_zone" "selected" {
+  name         = var.domain_name
+  private_zone = false
+}
+
+# Create an A record for the apex domain (example.com)
+resource "aws_route53_record" "apex" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = var.domain_name
+  type    = "A"
+  ttl     = 300
+  records = [aws_eip.microservices_eip.public_ip]
+}
+
+# Create an A record for the www subdomain (www.example.com)
+resource "aws_route53_record" "www" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = "www.${var.domain_name}"
+  type    = "A"
+  ttl     = 300
+  records = [aws_eip.microservices_eip.public_ip]
+}
+
+# Optional: Create additional records for subdomains (e.g., api.example.com)
+resource "aws_route53_record" "api" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = "api.${var.domain_name}"
+  type    = "A"
+  ttl     = 300
+  records = [aws_eip.microservices_eip.public_ip]
+}
+
 # Output the public IP address
 output "server_ip" {
   value = aws_eip.microservices_eip.public_ip
@@ -114,4 +148,17 @@ output "server_ip" {
 
 output "ssh_command" {
   value = "ssh -i ${var.private_key_path} ${var.ssh_user}@${aws_eip.microservices_eip.public_ip}"
+}
+
+# Add domain name outputs
+output "domain_name" {
+  value = var.domain_name
+}
+
+output "www_domain_name" {
+  value = "www.${var.domain_name}"
+}
+
+output "api_domain_name" {
+  value = "api.${var.domain_name}"
 }

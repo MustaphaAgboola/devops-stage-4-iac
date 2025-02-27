@@ -1,4 +1,3 @@
-# variables.tf
 variable "aws_region" {
   description = "AWS region to deploy resources"
   type        = string
@@ -36,7 +35,7 @@ variable "ssh_user" {
 variable "admin_ip_cidr" {
   description = "CIDR block for admin access to Traefik dashboard"
   type        = string
-  default     = "0.0.0.0/0"  # Replace with your IP for production
+  default     = "0.0.0.0/0" 
 }
 
 variable "domain_name" {

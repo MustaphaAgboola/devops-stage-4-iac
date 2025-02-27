@@ -1,4 +1,3 @@
-# ../traefik/traefik.yml.j2
 entryPoints:
   web:
     address: ":80"
